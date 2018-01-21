@@ -5,6 +5,10 @@ ref: http://web.archive.org/web/20120919234615/http://mkelsey.com/2011/07/03/Fli
 import time
 import requests
 import oauth2 as oauth
+import shutil
+import os
+import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class FlickrAPI(object):
@@ -130,8 +134,100 @@ class FlickrAPI(object):
             outfile.write('access_token_secret={}'.format(self._access_token_secret))
 
 
+def query_photos_by_bbox(min_long, min_lat, max_long, max_lat):
+    """ query photos by bbox """
+    url = 'https://api.flickr.com/services/rest/'
+    params = {
+        'method': 'flickr.photos.search',
+        'api_key': '165300b58a365ba2c650d0182ca6f5d9',
+        'bbox': ','.join([min_long, min_lat, max_long, max_lat]),
+        'format': 'json',
+        'nojsoncallback': '1',
+        'extras': 'url_o,original_format,geo'
+        'per_page': '500'
+    }
+    res = requests.get(url, params).json()
+    
+    # get number of pages
+    pages = int(res['photos']['pages'])
+    page = 1
+
+    # yield photo in each page
+    while page <= pages:
+        params['page'] = str(page)
+        r = requests.get(url, params)
+        res = r.json()
+
+        if res['stat'] != 'ok':
+            raise ValueError(r.url)
+
+        # yield each photo
+        yield res['photos']
+
+        page += 1
+
+
+def photo_info_to_url(photo_info):
+    """ convert photo dict into url for download """
+    if 'url_o' in photo_info:
+        return photo_info['url_o']
+    else:
+        return 'https://farm{farm}.staticflickr.com/{server}/{id}_{secret}.jpg'.format(**photo_info)
+
+
+def download_photo(photo_info, folder, d):
+    """ dowload photo provided as url """
+    url = photo_info_to_url(photo_info)
+    photo_filename = url.split('/')[-1]
+
+    # skip exist file 1/21
+    exist_file = os.path.join(os.getcwd(), 'photos', photo_filename)
+    if not os.path.exists(exist_file):
+
+        photo_path = os.path.join(folder, photo_filename)
+
+        res = requests.get(url, stream=True)
+        if res.status_code == 200:
+            with open(photo_path, 'wb') as outfile:
+                res.raw.decode_content = True
+                shutil.copyfileobj(res.raw, outfile)
+
+    # save the photo lat long
+    save_photo_lat_long(d, photo_filename, photo_info['latitude'], photo_info['longitude'])
+
+    # return 'Finished downloading {}'.format(photo_filename)
+
+
+def save_photo_lat_long(d, photo_filename, lat, lon):
+    d[photo_filename] = (lat, lon)
+
+
+def download_photo_by_page(photo_json, d):
+    page = photo_json['page']
+    folder = os.path.join(os.getcwd(), 'photos2', str(page))
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+
+    for photo in photo_json['photo']:
+        download_photo(photo, folder, d)
+    
+    msg = 'Finished downloading page: {}'.format(page)
+    print(msg)
+
+
+
 if __name__ == '__main__':
-    key = '165300b58a365ba2c650d0182ca6f5d9'
-    secret = '050836c8d87616de'
-    flickr = FlickrAPI(key, secret)
-    flickr.get_access_token()
+    # key = '165300b58a365ba2c650d0182ca6f5d9'
+    # secret = '050836c8d87616de'
+    # flickr = FlickrAPI(key, secret)
+    # flickr.get_access_token()
+    sf = ['-122.519311', '37.707870', '-122.358216', '37.818383']
+    photos = query_photos_by_bbox(*sf)
+    d = dict()  # key is photo id, and value is (lat, long)
+    with ThreadPoolExecutor(max_workers=40) as executor:
+        futures = [executor.submit(download_photo_by_page, photo, d) for photo in photos]
+        for future in as_completed(futures):
+            print(future.result())
+
+    with open(os.path.join(os.getcwd(), 'latlong.json'), 'w') as outfile:
+        json.dump(d, outfile)
