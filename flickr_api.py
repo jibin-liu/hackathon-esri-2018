@@ -144,7 +144,6 @@ def query_photos_by_bbox(min_long, min_lat, max_long, max_lat):
         'format': 'json',
         'nojsoncallback': '1',
         'extras': 'url_o,original_format,geo'
-        'per_page': '500'
     }
     res = requests.get(url, params).json()
     
@@ -162,7 +161,8 @@ def query_photos_by_bbox(min_long, min_lat, max_long, max_lat):
             raise ValueError(r.url)
 
         # yield each photo
-        yield res['photos']
+        for photo in res['photos']['photo']:
+            yield photo
 
         page += 1
 
@@ -175,17 +175,14 @@ def photo_info_to_url(photo_info):
         return 'https://farm{farm}.staticflickr.com/{server}/{id}_{secret}.jpg'.format(**photo_info)
 
 
-def download_photo(photo_info, folder, d):
+def download_photo(photo_info, folder):
     """ dowload photo provided as url """
     url = photo_info_to_url(photo_info)
     photo_filename = url.split('/')[-1]
+    photo_path = os.path.join(folder, photo_filename)
 
-    # skip exist file 1/21
-    exist_file = os.path.join(os.getcwd(), 'photos', photo_filename)
-    if not os.path.exists(exist_file):
-
-        photo_path = os.path.join(folder, photo_filename)
-
+    # check existing file
+    if not os.path.exists(photo_path):
         res = requests.get(url, stream=True)
         if res.status_code == 200:
             with open(photo_path, 'wb') as outfile:
@@ -193,26 +190,22 @@ def download_photo(photo_info, folder, d):
                 shutil.copyfileobj(res.raw, outfile)
 
     # save the photo lat long
-    save_photo_lat_long(d, photo_filename, photo_info['latitude'], photo_info['longitude'])
+    # save_photo_lat_long(d, photo_filename, photo_info['latitude'], photo_info['longitude'])
 
-    # return 'Finished downloading {}'.format(photo_filename)
+    return 'Finished downloading {}'.format(photo_filename)
 
 
 def save_photo_lat_long(d, photo_filename, lat, lon):
     d[photo_filename] = (lat, lon)
 
 
-def download_photo_by_page(photo_json, d):
-    page = photo_json['page']
-    folder = os.path.join(os.getcwd(), 'photos2', str(page))
+def download_photo_by_page(photo_json, page):
+    folder = os.path.join(os.getcwd(), 'photos', str(page))
     if not os.path.exists(folder):
         os.mkdir(folder)
 
     for photo in photo_json['photo']:
         download_photo(photo, folder, d)
-    
-    msg = 'Finished downloading page: {}'.format(page)
-    print(msg)
 
 
 
@@ -223,11 +216,8 @@ if __name__ == '__main__':
     # flickr.get_access_token()
     sf = ['-122.519311', '37.707870', '-122.358216', '37.818383']
     photos = query_photos_by_bbox(*sf)
-    d = dict()  # key is photo id, and value is (lat, long)
-    with ThreadPoolExecutor(max_workers=40) as executor:
-        futures = [executor.submit(download_photo_by_page, photo, d) for photo in photos]
+    folder = os.path.join(os.getcwd(), 'photos')
+    with ThreadPoolExecutor(max_workers=9) as executor:
+        futures = [executor.submit(download_photo, photo, folder) for photo in photos]
         for future in as_completed(futures):
             print(future.result())
-
-    with open(os.path.join(os.getcwd(), 'latlong.json'), 'w') as outfile:
-        json.dump(d, outfile)
