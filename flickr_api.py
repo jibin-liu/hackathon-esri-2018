@@ -7,10 +7,6 @@ import requests
 import oauth2 as oauth
 
 
-def get_flickr_api(filename=None, consumer_key=None, secret=None):
-    if filename:
-        
-
 class FlickrAPI(object):
     OAUTH_URL = r'https://www.flickr.com/services/oauth/'
 
@@ -115,12 +111,13 @@ class FlickrAPI(object):
 
             self._access_token = contents['oauth_token']
             self._access_token_secret = contents['oauth_token_secret']
+            import pdb; pdb.set_trace()
             self.save_access_token_to_file(filename=contents['username'])
 
         else:
             res.raise_for_status()
 
-    def save_access_token_to_file(filename):
+    def save_access_token_to_file(self, filename):
         """
         save access token and access token secret, using username as filename
         """
