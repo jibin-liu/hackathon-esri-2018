@@ -4,7 +4,6 @@ ref: http://web.archive.org/web/20120919234615/http://mkelsey.com/2011/07/03/Fli
 
 import time
 import requests
-import oauth2 as oauth
 import shutil
 import os
 import json
@@ -139,11 +138,12 @@ def query_photos_by_bbox(min_long, min_lat, max_long, max_lat):
     url = 'https://api.flickr.com/services/rest/'
     params = {
         'method': 'flickr.photos.search',
-        'api_key': '165300b58a365ba2c650d0182ca6f5d9',
+        'api_key': 'c4fe8cd9de5d67c6b06e12c46ff87568',
         'bbox': ','.join([min_long, min_lat, max_long, max_lat]),
         'format': 'json',
         'nojsoncallback': '1',
-        'extras': 'url_o,original_format,geo'
+        'extras': 'url_o,original_format,geo',
+        'per_page': '250'
     }
     res = requests.get(url, params).json()
     
@@ -214,10 +214,12 @@ if __name__ == '__main__':
     # secret = '050836c8d87616de'
     # flickr = FlickrAPI(key, secret)
     # flickr.get_access_token()
-    sf = ['-122.519311', '37.707870', '-122.358216', '37.818383']
-    photos = query_photos_by_bbox(*sf)
-    folder = os.path.join(os.getcwd(), 'photos')
-    with ThreadPoolExecutor(max_workers=9) as executor:
-        futures = [executor.submit(download_photo, photo, folder) for photo in photos]
-        for future in as_completed(futures):
-            print(future.result())
+    # sf = ['-122.519311', '37.707870', '-122.358216', '37.818383']
+    bbox = open(r'.\sf.csv').readlines()
+    for box in bbox:
+        photos = query_photos_by_bbox(*box.split(','))
+        folder = os.path.join(os.getcwd(), 'photos')
+        with ThreadPoolExecutor(max_workers=100) as executor:
+            futures = [executor.submit(download_photo, photo, folder) for photo in photos]
+            for future in as_completed(futures):
+                print(future.result())

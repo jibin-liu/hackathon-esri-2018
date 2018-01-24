@@ -1,3 +1,11 @@
+MyProject48/
+models/
+photos/
+photos_geo/
+photos_geo_for_clean/
+sample_data_for_model/
+sf.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
