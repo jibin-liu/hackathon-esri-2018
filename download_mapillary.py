@@ -4,6 +4,7 @@ import shutil
 import argparse
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
 
 BASE_DIR = 'downloaded/'
@@ -88,7 +89,6 @@ def download_images(query, path, size=1024):
 
 def download_worker(download_dir, min_lat, max_lat, min_lon, max_lon,
                     max_results=1000, image_size=1024):
-    import pdb; pdb.set_trace()
     # query api
     query = query_search_api(min_lat, max_lat, min_lon, max_lon, max_results)
     # create directories for saving
@@ -105,6 +105,21 @@ def download_worker(download_dir, min_lat, max_lat, min_lon, max_lon,
     print("{}/{} images downloaded into {}".format(*stats, download_dir))
 
 
+def move_download_logfile(download_dir):
+    """ move downloaded.txt file out to another folder """
+    # create logfolder
+    logfolder = os.path.join(download_dir, 'logfile')
+    if not os.path.exists(logfolder):
+        os.mkdir(logfolder)
+
+    for folder in tqdm(os.listdir(download_dir)):
+        download_txt = os.path.join(download_dir, folder, 'downloaded.txt')
+        dest = os.path.join(logfolder, folder + '.txt')
+        if os.path.exists(download_txt):
+            shutil.copyfile(download_txt, dest)
+            os.remove(download_txt)
+
+
 def main(polygons_json):
     with open(polygons_json, 'r') as infile:
         # load polygons
@@ -113,9 +128,13 @@ def main(polygons_json):
         # download images for each polygon
         with ThreadPoolExecutor(max_workers=8) as executor:
             for polygon in polygons:
-                folder = 'downloaded/{}/'.format(polygon)
+                folder = 'mapillary/{}/'.format(polygon)
                 bbox = polygons[polygon]
                 executor.submit(download_worker, folder, *bbox)
+
+    print('Move download logfiles:')
+    move_download_logfile('mapillary')
+    print('')
 
 
 if __name__ == '__main__':
@@ -123,7 +142,7 @@ if __name__ == '__main__':
     Use from command line as below, or run query_search_api and download_images
     from your own scripts.
     '''
-    
+
     main('polygons.json')
 
     # parser = argparse.ArgumentParser()
